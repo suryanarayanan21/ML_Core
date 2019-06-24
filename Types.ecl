@@ -297,7 +297,7 @@ EXPORT Types := MODULE
   EXPORT AUC_Result := RECORD
     t_Work_Item wi;
     t_Discrete classifier;
-    t_FieldReal AUC;
+    t_FieldNumber AUC;
   END;
   // End Analytic result structures
 
