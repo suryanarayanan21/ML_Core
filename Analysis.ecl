@@ -17,6 +17,7 @@ Classification_Accuracy := Types.Classification_Accuracy; // Return structure fo
                                                           // Classification.Accuracy
 Class_Accuracy := Types.Class_Accuracy; // Return structure for Classification.AccuracyByClass
 Regression_Accuracy := Types.Regression_Accuracy; // Return structure for Regression.Accuracy
+AUC_Result := Types.AUC_Result; // Return structure for Classification.AUC_Score
 
 /**
   * Analyze and assess the effectiveness of a Machine
@@ -185,6 +186,73 @@ EXPORT Analysis := MODULE
                                             SELF := LEFT));
       RETURN cStats;
     END; // AccuracyByClass
+    /**
+      * CorrectBinary
+      *
+      * Function to check whether the given data only contains binary classifiers
+      * and if so, to change the labels so that the higher label becomes 1 and the
+      * other becomes 0.
+      *
+      * @param field The dataset to be checked in DATASET(DiscreteField) format
+      * @return DATASET(DiscreteField) The corrected dataset.
+      *
+      */
+    SHARED DATASET(DiscreteField) CorrectBinary(DATASET(DiscreteField) field) := FUNCTION
+      g1 := TABLE(field, {wi,number,value},wi,number,value);
+      isBad := MAX(TABLE(g1,{wi,number,cnt:=COUNT(GROUP)},wi,number),cnt)>2;
+      corrected := PROJECT(field, TRANSFORM(DiscreteField,
+                                            SELF.value := IF(LEFT.value = MAX(g1(wi=LEFT.wi and number=LEFT.number),
+                                                                              g1.value),1,0),
+                                            SELF := LEFT));
+      RETURN IF(isBad, FAIL(corrected, 'Multi-label data not supported'), corrected);
+    END; // CorrectBinary
+    /**
+      * AUC_Score
+      *
+      * Provides the Area Under ROC Curve score. This score is calculated as the probability
+      * that a random positive sample is ranked higher than a random negative sample.
+      * This metric may only be used for the evaluation of binary classifiers, that provide
+      * the confidence or the probability that a sample is positive / belongs to a class.
+      *
+      * @param pred The predicted results in DATASET(Classify_Result) format
+      * @param actual The actual values in DATASET(DiscreteField) format
+      * @return DATASET(AUC_Result) One record per work item, per classifier, containing the
+      *                             the AUC score.
+      * @see ML_Core.Types.AUC_Result
+      *
+      */
+    EXPORT DATASET(AUC_Result) AUC_Score(DATASET(Classify_Result) pred, DATASET(DiscreteField) actual) := FUNCTION
+      // Check and convert the given data into 0's and 1's
+      Cactual := CorrectBinary(actual);
+      Cpred := JOIN(CorrectBinary(pred), pred,
+                    LEFT.wi=RIGHT.wi and
+                    LEFT.id=RIGHT.id and
+                    LEFT.number=RIGHT.number);
+      // Combine predicted scores and actual classes
+      comb := JOIN(Cpred, Cactual,
+                   LEFT.wi=RIGHT.wi and
+                   LEFT.id=RIGHT.id and
+                   LEFT.number=RIGHT.number,
+                   TRANSFORM({RECORDOF(Classify_Result), t_Discrete actual},
+                             SELF.actual := RIGHT.value,
+                             SELF.conf := (IF(LEFT.value=1,1,-1)*LEFT.conf/2) + 1,
+                             SELF := LEFT));
+      // All positive-negative pairs of points
+      pairs := JOIN(comb, comb,
+                    LEFT.wi = RIGHT.wi and
+                    LEFT.number = RIGHT.number and
+                    LEFT.actual = 1 and
+                    RIGHT.actual = 0,
+                    TRANSFORM({t_Work_Item wi, t_FieldNumber classifier, REAL isGood},
+                              SELF.wi := LEFT.wi,
+                              SELF.classifier := LEFT.number,
+                              // IF scores are equal - 0.5
+                              // IF scores match - 1
+                              // IF scores don't match - 0
+                              SELF.isGood := IF(LEFT.conf<>RIGHT.conf,IF(LEFT.conf>RIGHT.conf,1,0),0.5)));
+      // Sum of values / Total number - gives AUC
+      RETURN TABLE(pairs,{wi,classifier,AUC:=SUM(GROUP,isGood)/COUNT(GROUP)},wi,classifier);
+    END; // AUC_Score
   END; // Classification
   /**
     * This sub-module provides functions for analyzing and assessing the effectiveness of
