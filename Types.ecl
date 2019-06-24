@@ -283,6 +283,22 @@ EXPORT Types := MODULE
     t_FieldReal MSE;
     t_FieldReal RMSE;
   END;
+  /**
+    * AUC_Result
+    *
+    * Result layout for the Analysis.Classification.AUC metric
+    *
+    * @field wi Work item identifier
+    * @field classifier The field number assiciated with this dependent variable, for 
+    *                   multi-variate. Otherwise 1.
+    * @field AUC The Area Under ROC Curve for the given classifier and work item.
+    *
+    */
+  EXPORT AUC_Result := RECORD
+    t_Work_Item wi;
+    t_Discrete classifier;
+    t_FieldReal AUC;
+  END;
   // End Analytic result structures
 
   // Data diagnostic definition
