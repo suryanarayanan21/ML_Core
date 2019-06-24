@@ -286,7 +286,7 @@ EXPORT Types := MODULE
   /**
     * AUC_Result
     *
-    * Result layout for the Analysis.Classification.AUC metric
+    * Result layout for the Analysis.Classification.AUC_Score metric
     *
     * @field wi Work item identifier
     * @field classifier The field number assiciated with this dependent variable, for 
